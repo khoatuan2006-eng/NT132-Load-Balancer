@@ -1,0 +1,8 @@
+# Nginx binary & zip
+nginx-1.29.6.zip
+nginx-1.29.6/logs/
+nginx-1.29.6/temp/
+
+# Old files
+run.txt
+upgrade_recommendations.md
