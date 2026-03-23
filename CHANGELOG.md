@@ -1,0 +1,45 @@
+# Nhật Ký Công Việc
+
+## Level 1 — Nâng cấp Nginx Config
+
+### ✅ Nhiệm vụ 1: Passive Health Check + Backup Server
+
+**Mô tả:**
+Thêm cơ chế tự động phát hiện server chết và server dự phòng.
+
+**File đã thay đổi:**
+
+| File | Thay đổi |
+|---|---|
+| `nginx-1.29.6\conf\nginx.conf` | Chuyển sang dùng `include features/...` |
+| `nginx-1.29.6\conf\features\upstream.conf` | Thêm `max_fails`, `fail_timeout`, `backup` |
+| `nginx-1.29.6\conf\features\proxy.conf` | Proxy headers + no-cache |
+| `Server3\index.html` | Trang backup (nền đỏ) |
+
+**Chi tiết kỹ thuật:**
+
+1. **Passive Health Check** — trong `features/upstream.conf`
+   - `max_fails=3`: server fail 3 lần liên tiếp → bị loại khỏi pool
+   - `fail_timeout=30s`: bị loại 30 giây, sau đó Nginx thử lại
+   - Áp dụng cho: Server1 (port 8001), Server2 (port 8002)
+
+2. **Backup Server** — trong `features/upstream.conf`
+   - `server 127.0.0.1:8003 backup;`
+   - Bình thường **không nhận traffic**
+   - Chỉ hoạt động khi **cả Server1 và Server2 đều chết**
+
+**Cách test:**
+1. Chạy 3 server: `python -m http.server 8001/8002/8003` (trong Server1, Server2, Server3)
+2. Chạy Nginx: `cd nginx-1.29.6` → `nginx.exe`
+3. Truy cập `http://localhost:8080` → F5 → thấy Server1/Server2 xen kẽ
+4. Tắt Server1 → F5 → chỉ còn Server2 (health check loại Server1)
+5. Tắt Server2 → F5 → **Server3 BACKUP (trang đỏ) tự động lên thay**
+6. Bật lại Server1 hoặc Server2 → Server3 tự nghỉ
+
+---
+
+### ⬜ Nhiệm vụ 2: Weighted Round Robin + Sticky Session
+> Chưa thực hiện — file: `features/upstream.conf`
+
+### ⬜ Nhiệm vụ 3: Rate Limiting
+> Chưa thực hiện — file: `features/rate-limit.conf`
