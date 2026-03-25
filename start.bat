@@ -5,24 +5,27 @@ echo   KHOI DONG HE THONG LOAD BALANCER
 echo ========================================
 echo.
 
+:: Lay duong dan thu muc chua file .bat nay
+cd /d "%~dp0"
+
 :: Chay Server1 (port 8001)
 echo [1/4] Khoi dong Server1 (port 8001)...
-start "Server1 - Port 8001" cmd /c "cd /d d:\LoadBalance\Server1 && python -m http.server 8001"
+start "Server1 - Port 8001" cmd /c "cd /d "%~dp0Server1" && python -m http.server 8001"
 
 :: Chay Server2 (port 8002)
 echo [2/4] Khoi dong Server2 (port 8002)...
-start "Server2 - Port 8002" cmd /c "cd /d d:\LoadBalance\Server2 && python -m http.server 8002"
+start "Server2 - Port 8002" cmd /c "cd /d "%~dp0Server2" && python -m http.server 8002"
 
 :: Chay Server3 - Backup (port 8003)
 echo [3/4] Khoi dong Server3 - Backup (port 8003)...
-start "Server3 - Backup Port 8003" cmd /c "cd /d d:\LoadBalance\Server3 && python -m http.server 8003"
+start "Server3 - Backup Port 8003" cmd /c "cd /d "%~dp0Server3" && python -m http.server 8003"
 
 :: Doi 1 giay cho cac server khoi dong
 timeout /t 1 /nobreak >nul
 
 :: Chay Nginx
 echo [4/4] Khoi dong Nginx (port 8080)...
-cd /d d:\LoadBalance\nginx-1.29.6
+cd /d "%~dp0nginx-1.29.6"
 start nginx.exe
 
 echo.
