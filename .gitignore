@@ -1,7 +1,11 @@
 # Nginx binary & zip
 nginx-1.29.6.zip
-nginx-1.29.6/logs/
-nginx-1.29.6/temp/
+
+# Nginx runtime files (nhung giu thu muc bang .gitkeep)
+nginx-1.29.6/logs/*
+!nginx-1.29.6/logs/.gitkeep
+nginx-1.29.6/temp/*
+!nginx-1.29.6/temp/.gitkeep
 
 # Old files
 run.txt

@@ -5,8 +5,11 @@ echo   DUNG HE THONG LOAD BALANCER
 echo ========================================
 echo.
 
+:: Lay duong dan thu muc chua file .bat nay
+cd /d "%~dp0"
+
 echo [1/2] Dung Nginx...
-cd /d d:\LoadBalance\nginx-1.29.6
+cd /d "%~dp0nginx-1.29.6"
 nginx.exe -s stop 2>nul
 taskkill /f /im nginx.exe >nul 2>nul
 
