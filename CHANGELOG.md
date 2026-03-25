@@ -97,3 +97,23 @@ Giới hạn số request mỗi IP gửi được, chống DDoS.
 **Minh chứng:**
 
 ![Rate Limiting - Request bị chặn (503) khi vượt giới hạn](assets/rate_limit.jpg)
+
+---
+
+## Level 2 — Backend thực tế (Flask)
+
+### ✅ Khởi tạo Flask app + Utilities
+
+**Mô tả:**
+Tạo khung sườn Flask app và hàm tiện ích dùng chung, để team code các endpoint.
+
+**File đã thay đổi:**
+
+| File | Thay đổi |
+|---|---|
+| `backend\app.py` | Khởi tạo Flask, import 3 Blueprint, nhận `--port` từ CLI |
+| `backend\utils\stats.py` | `count_request()`, `get_uptime()`, `get_stats()` |
+| `backend\routes\health.py` | ⬜ Chờ team |
+| `backend\routes\info.py` | ⬜ Chờ team |
+| `backend\routes\stress.py` | ⬜ Chờ team |
+| `backend\requirements.txt` | `flask` |
