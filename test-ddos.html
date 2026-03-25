@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Rate Limiting (DDoS Simulator)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+        h1 {
+            font-size: 28px;
+            background: linear-gradient(135deg, #ff4444, #ff8800);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        .subtitle { color: #888; margin-bottom: 30px; font-size: 14px; }
+        .controls {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        label { font-size: 14px; color: #aaa; }
+        input[type="number"] {
+            width: 80px;
+            padding: 8px 12px;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            text-align: center;
+        }
+        button {
+            padding: 12px 32px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #btnStart {
+            background: linear-gradient(135deg, #ff4444, #cc0000);
+            color: white;
+            box-shadow: 0 4px 20px rgba(255, 68, 68, 0.3);
+        }
+        #btnStart:hover { transform: scale(1.05); box-shadow: 0 6px 30px rgba(255, 68, 68, 0.5); }
+        #btnStart:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        #btnClear {
+            background: #2a2a3e;
+            color: #aaa;
+        }
+        #btnClear:hover { background: #3a3a4e; }
+        .stats {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .stat-box {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 16px 28px;
+            text-align: center;
+            min-width: 120px;
+            border: 1px solid #2a2a3e;
+        }
+        .stat-box .value {
+            font-size: 32px;
+            font-weight: 700;
+        }
+        .stat-box .label { font-size: 12px; color: #888; margin-top: 4px; }
+        .ok .value { color: #44ff44; }
+        .blocked .value { color: #ff4444; }
+        .pending .value { color: #ffaa00; }
+        .total .value { color: #4488ff; }
+        .log-container {
+            width: 100%;
+            max-width: 700px;
+            background: #1a1a2e;
+            border-radius: 12px;
+            border: 1px solid #2a2a3e;
+            overflow: hidden;
+            flex: 1;
+        }
+        .log-header {
+            padding: 12px 16px;
+            background: #22223a;
+            font-size: 13px;
+            color: #888;
+            border-bottom: 1px solid #2a2a3e;
+        }
+        .log {
+            padding: 12px 16px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+        .log div { padding: 2px 0; }
+        .log .ok-line { color: #44ff44; }
+        .log .blocked-line { color: #ff4444; }
+        .log .error-line { color: #ff8800; }
+        .progress-bar {
+            width: 100%;
+            max-width: 700px;
+            height: 6px;
+            background: #1a1a2e;
+            border-radius: 3px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #ff4444, #ff8800);
+            border-radius: 3px;
+            transition: width 0.1s;
+        }
+    </style>
+</head>
+<body>
+    <h1>⚡ DDoS Simulator</h1>
+    <p class="subtitle">Test Rate Limiting trên localhost:8080</p>
+
+    <div class="controls">
+        <div>
+            <label>Số request:</label>
+            <input type="number" id="reqCount" value="100" min="1" max="1000">
+        </div>
+        <button id="btnStart" onclick="startAttack()">🚀 Bắt đầu</button>
+        <button id="btnClear" onclick="clearLog()">Xóa log</button>
+    </div>
+
+    <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+
+    <div class="stats">
+        <div class="stat-box total"><div class="value" id="statTotal">0</div><div class="label">Tổng</div></div>
+        <div class="stat-box ok"><div class="value" id="statOk">0</div><div class="label">200 OK</div></div>
+        <div class="stat-box blocked"><div class="value" id="statBlocked">0</div><div class="label">503 Blocked</div></div>
+        <div class="stat-box pending"><div class="value" id="statPending">0</div><div class="label">Đang gửi</div></div>
+    </div>
+
+    <div class="log-container">
+        <div class="log-header">📋 Request Log</div>
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let okCount = 0, blockedCount = 0, totalDone = 0, totalReq = 0;
+
+        function updateStats(pending) {
+            document.getElementById('statTotal').textContent = totalDone;
+            document.getElementById('statOk').textContent = okCount;
+            document.getElementById('statBlocked').textContent = blockedCount;
+            document.getElementById('statPending').textContent = pending;
+            document.getElementById('progress').style.width = (totalDone / totalReq * 100) + '%';
+        }
+
+        function addLog(msg, cls) {
+            const log = document.getElementById('log');
+            const div = document.createElement('div');
+            div.className = cls;
+            div.textContent = msg;
+            log.prepend(div);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+            okCount = 0; blockedCount = 0; totalDone = 0;
+            updateStats(0);
+            document.getElementById('progress').style.width = '0%';
+        }
+
+        async function startAttack() {
+            const btn = document.getElementById('btnStart');
+            btn.disabled = true;
+            totalReq = parseInt(document.getElementById('reqCount').value) || 100;
+            okCount = 0; blockedCount = 0; totalDone = 0;
+            document.getElementById('log').innerHTML = '';
+
+            const url = 'http://localhost:8080/';
+            const startTime = Date.now();
+
+            addLog(`🚀 Gửi ${totalReq} request đồng thời tới ${url}`, 'ok-line');
+            updateStats(totalReq);
+
+            // Gửi tất cả request cùng lúc (song song)
+            const promises = [];
+            for (let i = 1; i <= totalReq; i++) {
+                const id = i;
+                const p = fetch(url, { mode: 'no-cors', cache: 'no-store' })
+                    .then(res => {
+                        totalDone++;
+                        if (res.status === 200 || res.status === 0) {
+                            okCount++;
+                            addLog(`#${id}  ✅ 200 OK`, 'ok-line');
+                        } else if (res.status === 503 || res.status === 429) {
+                            blockedCount++;
+                            addLog(`#${id}  🚫 ${res.status} BLOCKED (Rate Limited!)`, 'blocked-line');
+                        } else {
+                            blockedCount++;
+                            addLog(`#${id}  ⚠️  ${res.status}`, 'error-line');
+                        }
+                        updateStats(totalReq - totalDone);
+                    })
+                    .catch(err => {
+                        totalDone++;
+                        blockedCount++;
+                        addLog(`#${id}  ❌ Error: ${err.message}`, 'error-line');
+                        updateStats(totalReq - totalDone);
+                    });
+                promises.push(p);
+            }
+
+            await Promise.all(promises);
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+            addLog(`\n⏱️ Hoàn thành trong ${elapsed}s — OK: ${okCount}, Blocked: ${blockedCount}`, 'ok-line');
+            btn.disabled = false;
+        }
+    </script>
+</body>
+</html>
