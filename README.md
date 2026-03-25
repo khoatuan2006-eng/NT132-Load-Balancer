@@ -16,7 +16,15 @@ d:\LoadBalance\
 │       ├── rate-limit.conf                       Chống DDoS
 │       └── proxy.conf                            Proxy headers + cache
 │
-├── backend\app.py                             ← Flask backend (Level 2)
+├── backend\                                   ← Flask backend (Level 2)
+│   ├── app.py                                   Entry point, khởi tạo Flask
+│   ├── requirements.txt                         Thư viện cần cài (flask)
+│   ├── routes\
+│   │   ├── health.py                            GET /health — trạng thái server
+│   │   ├── info.py                              GET /info — hostname, port, uptime
+│   │   └── stress.py                            GET /stress — giả lập CPU load
+│   └── utils\
+│       └── stats.py                             Đếm request, tính uptime
 │
 ├── dashboard\                                 ← Dashboard (Level 3)
 │   ├── index.html
@@ -82,14 +90,16 @@ Client
 
 ---
 
-### Level 2 — Backend thực tế (Flask/FastAPI)
+### Level 2 — Backend thực tế (Flask)
 
 | Tính năng | Nằm ở file | Mô tả |
 |---|---|---|
-| Flask app | `backend\app.py` | Thay `python http.server` |
-| Health check API | `backend\app.py` | Endpoint `/health` |
-| Server info API | `backend\app.py` | Endpoint `/info` |
-| Stress test API | `backend\app.py` | Endpoint `/stress` |
+| Flask app (entry point) | `backend\app.py` | Khởi tạo Flask, import routes |
+| Health check API | `backend\routes\health.py` | Endpoint `/health` |
+| Server info API | `backend\routes\info.py` | Endpoint `/info` — hostname, port, uptime |
+| Stress test API | `backend\routes\stress.py` | Endpoint `/stress` — giả lập CPU load |
+| Utilities | `backend\utils\stats.py` | Đếm request, tính uptime |
+| Dependencies | `backend\requirements.txt` | `flask` |
 
 ---
 
