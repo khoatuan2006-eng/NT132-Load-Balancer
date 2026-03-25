@@ -16,7 +16,15 @@ d:\LoadBalance\
 │       ├── rate-limit.conf                       Chống DDoS
 │       └── proxy.conf                            Proxy headers + cache
 │
-├── backend\app.py                             ← Flask backend (Level 2)
+├── backend\                                   ← Flask backend (Level 2)
+│   ├── app.py                                   Entry point, khởi tạo Flask
+│   ├── requirements.txt                         Thư viện cần cài (flask)
+│   ├── routes\
+│   │   ├── health.py                            GET /health — trạng thái server
+│   │   ├── info.py                              GET /info — hostname, port, uptime
+│   │   └── stress.py                            GET /stress — giả lập CPU load
+│   └── utils\
+│       └── stats.py                             Đếm request, tính uptime
 │
 ├── dashboard\                                 ← Dashboard (Level 3)
 │   ├── index.html
@@ -82,14 +90,78 @@ Client
 
 ---
 
-### Level 2 — Backend thực tế (Flask/FastAPI)
+### Level 2 — Backend thực tế (Flask)
 
-| Tính năng | Nằm ở file | Mô tả |
+> **Mục tiêu:** Thay thế `python -m http.server` (chỉ serve HTML tĩnh) bằng Flask app thực sự,
+> có API để Nginx kiểm tra sức khỏe server, xem thông tin, và test hiệu năng.
+>
+> **Tại sao cần?** Ở Level 1, backend chỉ là trang HTML tĩnh — không có logic gì.
+> Level 2 biến mỗi backend thành một ứng dụng thực tế mà Nginx có thể load balance.
+
+**Cài đặt:**
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+**Chạy:** (thay port 8001/8002 tùy server)
+```bash
+python app.py --port 8001
+python app.py --port 8002
+```
+
+| File | Người phụ trách | Việc cần làm |
 |---|---|---|
-| Flask app | `backend\app.py` | Thay `python http.server` |
-| Health check API | `backend\app.py` | Endpoint `/health` |
-| Server info API | `backend\app.py` | Endpoint `/info` |
-| Stress test API | `backend\app.py` | Endpoint `/stress` |
+| `backend\app.py` | — | Khởi tạo Flask app, import route từ `routes/`, nhận `--port` từ command line |
+| `backend\routes\health.py` | — | Tạo endpoint `GET /health` |
+| `backend\routes\info.py` | — | Tạo endpoint `GET /info` |
+| `backend\routes\stress.py` | — | Tạo endpoint `GET /stress` |
+| `backend\utils\stats.py` | — | Hàm tiện ích dùng chung cho các route |
+| `backend\requirements.txt` | ✅ Đã có | Chỉ chứa `flask` |
+
+**Chi tiết từng endpoint:**
+
+#### 1. `GET /health` → `routes/health.py`
+Nginx gọi endpoint này để kiểm tra server còn sống không (health check).
+
+```
+Request:  GET http://localhost:8001/health
+Response: {"status": "ok"}        ← HTTP 200
+          {"status": "unhealthy"} ← HTTP 503 (nếu server có vấn đề)
+```
+
+#### 2. `GET /info` → `routes/info.py`
+Trả về thông tin server — dùng để xác nhận Nginx đang gửi request tới server nào.
+
+```
+Request:  GET http://localhost:8001/info
+Response: {
+    "server": "Server1",
+    "port": 8001,
+    "hostname": "DESKTOP-ABC123",
+    "uptime": "00:05:32",
+    "total_requests": 42
+}
+```
+
+#### 3. `GET /stress` → `routes/stress.py`
+Giả lập server bận (tính toán nặng) — dùng để test xem Nginx có phân tải đều không khi server bị chậm.
+
+```
+Request:  GET http://localhost:8001/stress?seconds=2
+Response: {
+    "server": "Server1",
+    "task": "CPU stress test",
+    "duration": "2.00s",
+    "result": "completed"
+}
+```
+
+#### 4. `utils/stats.py`
+Hàm dùng chung, ví dụ:
+- `get_uptime()` → tính thời gian server đã chạy
+- `count_request()` → đếm tổng số request đã nhận
+- `get_stats()` → trả về dict tổng hợp
 
 ---
 
