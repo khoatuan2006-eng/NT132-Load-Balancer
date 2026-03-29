@@ -176,17 +176,53 @@ Hàm dùng chung, ví dụ:
 
 ### Level 4 — HA (HAProxy + Keepalived trên Ubuntu VM)
 
+> **Mục tiêu chung:**
+> Ở Level 1-3, nếu **Nginx chết** → toàn bộ hệ thống chết (single point of failure).
+> Level 4 giải quyết bằng cách thêm **2 lớp phía trước Nginx**:
+> - **HAProxy** — phân tải request tới Nginx (giống Nginx phân tải tới backend)
+> - **Keepalived** — nếu HAProxy chết trên VM1, tự động chuyển sang VM2
+>
+> **Kết quả cuối cùng:** Client truy cập qua 1 IP duy nhất (Virtual IP), dù VM1 hay VM2 chết thì hệ thống **vẫn hoạt động**.
+
+**Yêu cầu:** Mỗi người tự setup 2 VM Ubuntu trên máy mình theo `ha/vm-setup.md`.
+Mỗi người viết 1 phần config → push GitHub → cả team pull về dùng.
+
+**Phân công viết config:**
+
+| Người | Viết file | Mục tiêu task |
+|---|---|---|
+| **Người 1** | `ha\haproxy.cfg` | **Mục tiêu:** Viết config để HAProxy nhận request từ client (port 80), chuyển tới Nginx trên máy Windows (port 8080), và có trang stats để xem trạng thái (port 8404). Cả 2 VM dùng chung config này. |
+| **Người 2** | `ha\keepalived-master.conf` + `ha\keepalived-backup.conf` | **Mục tiêu:** Viết config để Keepalived quản lý Virtual IP (VIP). VM1 là MASTER (priority 101, giữ VIP), VM2 là BACKUP (priority 100, chờ sẵn). Khi MASTER chết → VIP tự chuyển sang BACKUP. |
+| **Người 3** | `ha\check_haproxy.sh` | **Mục tiêu:** Viết script bash để Keepalived kiểm tra HAProxy còn chạy không. Nếu HAProxy chết → script trả exit 1 → Keepalived biết và chuyển VIP sang VM kia. |
+
+**Mỗi người đều phải tự làm trên máy mình:**
+
+1. ✅ Setup 2 VM Ubuntu theo `ha/vm-setup.md`
+2. ✅ Cấu hình mạng Bridged Adapter (2 VM + Windows ping được nhau)
+3. ✅ Cài `haproxy` + `keepalived` trên cả 2 VM
+4. ✅ Pull config từ GitHub → paste vào VM
+5. ✅ Test failover: tắt HAProxy trên VM1 → VIP tự chuyển sang VM2
+6. ✅ Quay video demo kết quả
+
+**Quy trình:**
+
+```
+Bước 1: Mỗi người tự setup 2 VM (song song, theo vm-setup.md)
+          │
+Bước 2: Mỗi người viết config phần mình → push GitHub
+          │
+Bước 3: Pull code → paste config vào VM → test failover
+```
+
+**Bảng tổng hợp file:**
+
 | # | Tính năng | Nằm ở file | Mô tả |
 |---|---|---|---|
-| 1 | HAProxy frontend | `ha\haproxy.cfg` | Nhận request từ client (port 80) |
-| 2 | HAProxy backend | `ha\haproxy.cfg` | Phân tải tới các Nginx node |
-| 3 | HAProxy health check | `ha\haproxy.cfg` | Kiểm tra Nginx node còn sống không |
-| 4 | HAProxy stats page | `ha\haproxy.cfg` | Dashboard HAProxy có sẵn (port 8404) |
-| 5 | HAProxy thuật toán LB | `ha\haproxy.cfg` | `roundrobin`, `leastconn`, `source` |
-| 6 | Keepalived MASTER | `ha\keepalived-master.conf` | VM1, priority 101, giữ VIP |
-| 7 | Keepalived BACKUP | `ha\keepalived-backup.conf` | VM2, priority 100, chờ sẵn |
-| 8 | Health check script | `ha\check_haproxy.sh` | Kiểm tra HAProxy → chuyển VIP |
-| 9 | Hướng dẫn cài VM | `ha\vm-setup.md` | Cài Ubuntu, HAProxy, Keepalived |
+| 1 | HAProxy config | `ha\haproxy.cfg` | Frontend + Backend + Stats page |
+| 2 | Keepalived MASTER | `ha\keepalived-master.conf` | VM1, priority 101, giữ VIP |
+| 3 | Keepalived BACKUP | `ha\keepalived-backup.conf` | VM2, priority 100, chờ sẵn |
+| 4 | Health check script | `ha\check_haproxy.sh` | Kiểm tra HAProxy → chuyển VIP |
+| 5 | Hướng dẫn setup VM | `ha\vm-setup.md` | ✅ Đã có — cài VirtualBox, Ubuntu, mạng |
 
 ---
 
