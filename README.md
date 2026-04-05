@@ -321,92 +321,160 @@ sudo systemctl start haproxy
 
 ### Level 6 — Cascading Failure Prevention ⭐ (Tính năng tâm huyết)
 
-> **Mục tiêu:** Giải quyết vấn đề **sụp đổ dây chuyền** (cascading failure) — nguyên nhân #1
-> gây sập hệ thống lớn như Facebook (2021), AWS (2017), Google Cloud (2020).
->
-> **Tham khảo:**
-> - Google SRE Book — Ch.21: *Handling Overload*
-> - Google SRE Book — Ch.22: *Addressing Cascading Failures*
-> - Netflix Hystrix — Circuit Breaker Pattern
->
-> **Liên hệ CCNA:** VRRP (Keepalived) tương đương HSRP (Cisco) — cùng nguyên lý
-> redundancy và failover, ứng dụng thực tế trên Linux.
+> **Mục tiêu:** Giải quyết hiện tượng cascading failure (sụp đổ dây chuyền) — nguyên nhân gây sập các hệ thống lớn như:
+> - Facebook outage 2021
+> - AWS S3 outage 2017
+> - Google Cloud outage 2020
 
-#### Vấn đề cần giải quyết
+👉 **Mục tiêu:**
+- Không sập toàn hệ thống
+- Giữ ổn định khi quá tải
+- Tự phục hồi sau lỗi
+- Phát hiện sớm sự cố
 
-```
-Hệ thống KHÔNG có protection:
-  Server1 chết → Server2 gánh gấp đôi → QUÁ TẢI → Server2 CHẾT
-  → Server3 (backup) gánh tất cả → QUÁ TẢI → Server3 CHẾT
-  → CẢ HỆ THỐNG SẬP HOÀN TOÀN (cascading failure)
+#### ⚠️ Vấn đề cần giải quyết
 
-Hệ thống CÓ protection:
-  Server1 chết → Server2 nhận thêm traffic
-  → NHƯNG maxconn giới hạn → Server2 chỉ nhận đủ sức
-  → Request dư → trả "503 Hệ thống bận" (graceful degradation)
-  → Server2 VẪN SỐNG, vẫn phục vụ bình thường ✅
-  → Server1 restart → slow start → tăng dần 10% → 100%
-  → Hệ thống TỰ PHỤC HỒI ✅
+**🔴 Không có protection**
+```text
+Server1 chết
+→ Server2 overload → chết
+→ Server3 overload → chết
+→ SYSTEM DOWN
 ```
 
-#### 4 tính năng chống Cascading Failure
+**🟢 Có protection (Fail-fast + Monitoring)**
+```text
+Server1 chết
+→ Server2 giới hạn tải (maxconn)
+→ request dư → trả 503
 
-| # | Tính năng | Mô tả | Config |
+→ Monitoring phát hiện:
+   - error tăng
+   - queue tăng
+
+→ Server1 phục hồi (slowstart)
+→ hệ thống ổn định
+```
+
+#### 🛡️ 9 cơ chế chống Cascading Failure (FINAL)
+
+| # | Cơ chế | Mô tả | Config |
 |---|---|---|---|
-| 1 | **Maxconn Protection** | Giới hạn số kết nối mỗi server — thà trả 503 còn hơn để server chết | `maxconn 100` per server |
-| 2 | **Slow Start** | Server restart → nhận 10% traffic → tăng dần → 100% trong 30s | `slowstart 30s` |
-| 3 | **Request Priority** | Khi overload: giữ `/health`, `/info` (quan trọng), drop `/stress` (thấp) | HAProxy ACL rules |
-| 4 | **Graceful Degradation** | Server quá tải → trả response rút gọn thay vì timeout | Flask middleware |
+| 1 | Rate Limiting | Giới hạn request từ client | `stick-table` |
+| 2 | Maxconn | Giới hạn kết nối/server | `maxconn 100` |
+| 3 | Timeout | Cắt request treo | `timeout 10s` |
+| 4 | Queue Limit | Giới hạn hàng đợi | `maxqueue 50` |
+| 5 | Circuit Breaker | Ngắt server lỗi | `fall/rise` |
+| 6 | Retry Control | Giới hạn retry | `retries 2` |
+| 7 | Slow Start | Phục hồi an toàn | `slowstart 30s` |
+| 8 | Priority Routing | Bảo vệ request quan trọng | `ACL` |
+| 9 | Monitoring | Theo dõi hệ thống real-time | `stats` / `Prometheus` |
 
-#### Cách test — SO SÁNH trước/sau
+#### ⚙️ Cấu hình HAProxy
 
-**Test 1: KHÔNG có protection (chứng minh vấn đề)**
+```haproxy
+global
+    maxconn 2000
+    log stdout format raw local0
 
-```bash
-# 1. Tắt maxconn, slowstart trong haproxy.cfg
-# 2. Chạy load test (gửi 1000 request/s)
-# 3. Kill Server1
-# 4. Quan sát: Server2 quá tải → response time tăng → timeout → chết
-# 5. Server3 backup lên → cũng chết
-# → Kết quả: HỆ THỐNG SẬP HOÀN TOÀN
+defaults
+    mode http
+    timeout connect 5s
+    timeout client 10s
+    timeout server 10s
+    retries 2
+
+frontend http_front
+    bind *:8080
+
+    # 🔥 Rate limiting
+    stick-table type ip size 1m expire 10s store http_req_rate(10s)
+    http-request track-sc0 src
+    http-request deny if { sc_http_req_rate(0) gt 100 }
+
+    default_backend web
+
+backend web
+    balance roundrobin
+    option httpchk GET /health
+
+    # 🔥 Queue protection
+    maxqueue 50
+
+    # 🔥 Priority routing
+    acl is_critical path_beg /health /info
+    acl is_low path_beg /stress
+    http-request deny if is_low { srv_conn gt 80 }
+
+    # 🔥 Servers + Circuit Breaker
+    server s1 127.0.0.1:5001 check maxconn 100 slowstart 30s fall 3 rise 2
+    server s2 127.0.0.1:5002 check maxconn 100 slowstart 30s fall 3 rise 2
+    server s3 127.0.0.1:5003 check backup maxconn 100 slowstart 30s fall 3 rise 2
+
+# 🔥 Monitoring (HAProxy stats)
+listen stats
+    bind *:8404
+    stats enable
+    stats uri /stats
 ```
 
-**Test 2: CÓ protection (chứng minh giải pháp)**
+#### 📊 Monitoring (CHI TIẾT)
 
-```bash
-# 1. Bật maxconn, slowstart, request priority
-# 2. Chạy cùng load test (1000 request/s)
-# 3. Kill Server1
-# 4. Quan sát: Server2 giới hạn tải → trả 503 cho request dư
-# 5. Server2 VẪN SỐNG, vẫn phục vụ bình thường
-# 6. Server1 restart → slow start → hệ thống phục hồi
-# → Kết quả: HỆ THỐNG KHÔNG SẬP
-```
+**🎯 Mục tiêu**
+- Phát hiện sớm overload
+- Quan sát hành vi hệ thống
+- Hỗ trợ debug cascading failure
 
-**Đo lường:**
+**🔥 Metrics quan trọng**
 
-| Chỉ số | Không có protection | Có protection |
+| Metric | Ý nghĩa |
+|---|---|
+| RPS | tải hệ thống |
+| Error rate | mức độ fail |
+| Latency (p95, p99) | độ trễ |
+| Active connections | tải server |
+| Queue length | backlog |
+
+**🧠 Khi cascade xảy ra:**
+- Queue ↑
+- Latency ↑
+- Error ↑
+→ dấu hiệu hệ thống sắp chết
+
+**🛠️ Tools**
+- Cơ bản: HAProxy stats (`/stats`), `tcpdump`
+- Nâng cao: Prometheus, Grafana
+
+#### 🧪 Cách test — SO SÁNH
+
+**🔴 Test 1: Không protection**
+→ System crash hoàn toàn
+
+**🟢 Test 2: Full protection + monitoring**
+→ System:
+  - vẫn hoạt động
+  - monitoring hiển thị:
+    - error spike
+    - queue tăng
+
+**🔥 Test 3: Retry storm**
+→ monitoring thấy spike traffic
+
+**🔥 Test 4: Recovery**
+→ monitoring thấy load tăng dần (slowstart)
+
+**🔥 Test 5: Rate limit attack**
+→ monitoring thấy request bị drop
+
+#### 📈 Đo lường
+
+| Metric | Không protection | Full system |
 |---|---|---|
-| Thời gian sập toàn bộ | ~10 giây | ∞ (không sập) |
-| Response time trung bình | 15ms → timeout | 15ms → 20ms (ổn định) |
-| Số request thất bại | 100% (sau cascade) | ~30% (503, có kiểm soát) |
-| Thời gian phục hồi | Phải restart thủ công | Tự phục hồi trong 30s |
-
-#### Phân công nhóm
-
-| Thành viên | Phụ trách | Chi tiết |
-|---|---|---|
-| **Người 1** | Detection & Config | Cấu hình `maxconn`, `slowstart`, ACL trong `haproxy.cfg` |
-| **Người 2** | Testing & Measurement | Viết kịch bản test, đo lường, ghi kết quả trước/sau |
-| **Người 3** | Visualization & Report | Giám sát bằng HAProxy stats + `tcpdump`, viết báo cáo tham khảo Google SRE |
-
-#### Tài liệu tham khảo
-
-1. **Google SRE Book** — [Ch.21: Handling Overload](https://sre.google/sre-book/handling-overload/)
-2. **Google SRE Book** — [Ch.22: Addressing Cascading Failures](https://sre.google/sre-book/addressing-cascading-failures/)
-3. **Netflix Hystrix** — [Circuit Breaker Pattern](https://github.com/Netflix/Hystrix/wiki)
-4. **Microsoft Azure** — [Circuit Breaker Design Pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker)
-5. **CCNA/CCNP** — HSRP vs VRRP comparison (Cisco vs Linux redundancy)
+| Uptime | ~10s | ∞ |
+| Error rate | 100% | ~30–40% |
+| Latency | timeout | ổn định |
+| Recovery | manual | auto |
+| Visibility | none | full |
 
 ---
 
