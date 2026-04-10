@@ -43,12 +43,17 @@ def index():
 # ------------------------------------
 
 
-# Bộ đếm: Mỗi khi có bất kỳ request nào gửi tới, tự động cộng 1 vào thống kê
+# Bộ đếm: chỉ đếm request thực từ client, bỏ qua health check và monitoring
 from utils.stats import count_request
+from flask import request as flask_request
+
+# Các path nội bộ — KHÔNG đếm vào total_requests
+INTERNAL_PATHS = {'/health', '/info'}
 
 @app.before_request
 def before_request():
-    count_request()
+    if flask_request.path not in INTERNAL_PATHS:
+        count_request()
 
 if __name__ == '__main__':
     # 3. Nhận --port từ command line

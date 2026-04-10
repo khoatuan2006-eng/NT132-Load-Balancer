@@ -7,6 +7,11 @@ nginx-1.29.6/logs/*
 nginx-1.29.6/temp/*
 !nginx-1.29.6/temp/.gitkeep
 
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
 # Old files
 run.txt
 upgrade_recommendations.md

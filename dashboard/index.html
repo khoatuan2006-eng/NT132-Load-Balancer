@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Level 6 — Cascading Failure Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #7d8590;
+      --green:     #3fb950;
+      --yellow:    #d29922;
+      --red:       #f85149;
+      --blue:      #58a6ff;
+      --purple:    #bc8cff;
+      --accent:    #1f6feb;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .logo { font-size: 22px; }
+    .header-title {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+    }
+    .header-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(31,111,235,0.2);
+      color: var(--blue);
+      border: 1px solid rgba(31,111,235,0.4);
+    }
+    .refresh-info { font-size: 13px; color: var(--muted); }
+    #last-updated { color: var(--text); font-family: 'JetBrains Mono', monospace; }
+
+    /* ── Layout ───────────────────────────────────────────────────────────── */
+    main { max-width: 1200px; margin: 0 auto; padding: 28px 24px; }
+
+    /* ── Risk Banner ──────────────────────────────────────────────────────── */
+    #risk-banner {
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border: 1px solid transparent;
+      transition: all 0.4s ease;
+    }
+    #risk-banner.OK       { background: rgba(63,185,80,.10); border-color: rgba(63,185,80,.3); }
+    #risk-banner.WARNING  { background: rgba(210,153,34,.10); border-color: rgba(210,153,34,.3); }
+    #risk-banner.CRITICAL { background: rgba(248,81,73,.10);  border-color: rgba(248,81,73,.3);
+      animation: pulse-border 1.5s infinite; }
+    #risk-banner.LOADING  { background: rgba(88,166,255,.05); border-color: var(--border); }
+
+    @keyframes pulse-border {
+      0%,100% { box-shadow: 0 0 0 0 rgba(248,81,73,0); }
+      50%      { box-shadow: 0 0 0 6px rgba(248,81,73,.15); }
+    }
+
+    .risk-icon { font-size: 36px; }
+    .risk-title { font-size: 22px; font-weight: 800; }
+    .risk-desc  { font-size: 14px; color: var(--muted); margin-top: 2px; }
+    .risk-summary { margin-left: auto; text-align: right; }
+    .risk-summary .nums { font-size: 28px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+    .risk-summary .nums .up   { color: var(--green); }
+    .risk-summary .nums .down { color: var(--red); }
+    .risk-summary .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Section Headers ──────────────────────────────────────────────────── */
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Server Cards Grid ────────────────────────────────────────────────── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+
+    .server-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      transition: border-color 0.3s, box-shadow 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .server-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 12px 12px 0 0;
+      background: var(--border);
+      transition: background 0.3s;
+    }
+    .server-card.UP::before     { background: var(--green); }
+    .server-card.DOWN::before   { background: var(--red); }
+    .server-card.UNHEALTHY::before { background: var(--yellow); }
+    .server-card.LOADING::before   { background: var(--border); }
+
+    .server-card.UP     { border-color: rgba(63,185,80,.3); }
+    .server-card.DOWN   { border-color: rgba(248,81,73,.3); }
+    .server-card.UNHEALTHY { border-color: rgba(210,153,34,.3); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .card-name { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .backup-tag {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(188,140,255,.15);
+      color: var(--purple);
+      border: 1px solid rgba(188,140,255,.3);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .status-badge {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .status-badge.UP       { background: rgba(63,185,80,.15); color: var(--green); }
+    .status-badge.DOWN     { background: rgba(248,81,73,.15); color: var(--red); }
+    .status-badge.UNHEALTHY{ background: rgba(210,153,34,.15); color: var(--yellow); }
+    .status-badge.LOADING  { background: rgba(125,133,144,.1); color: var(--muted); }
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor;
+    }
+    .dot.pulse { animation: blink 1.2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .card-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .metric {
+      background: rgba(0,0,0,.25);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .metric-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+    .metric-value {
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text);
+      word-break: break-all;
+    }
+    .metric-value.na { color: var(--muted); font-size: 12px; }
+
+    /* ── HAProxy Stats Table ─────────────────────────────────────────────── */
+    .haproxy-section { margin-bottom: 36px; }
+
+    .stats-table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: rgba(0,0,0,.3);
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.2s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,.03); }
+    tbody td { padding: 10px 16px; font-family: 'JetBrains Mono', monospace; }
+    .tbl-status-up   { color: var(--green); font-weight: 700; }
+    .tbl-status-down { color: var(--red);   font-weight: 700; }
+    .tbl-status-no   { color: var(--muted); }
+
+    #haproxy-error {
+      padding: 20px 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* ── Protection Mechanisms Panel ─────────────────────────────────────── */
+    .mechanisms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+    .mech-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .mech-icon { font-size: 22px; }
+    .mech-name { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+    .mech-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+    .mech-active {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green);
+      margin-top: 5px;
+      flex-shrink: 0;
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    /* ── Spinner ──────────────────────────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="header-left">
+    <span class="logo">🛡️</span>
+    <span class="header-title">Cascading Failure Monitor</span>
+    <span class="header-badge">Level 6</span>
+  </div>
+  <div class="refresh-info">
+    Cập nhật: <span id="last-updated">—</span> &nbsp;|&nbsp;
+    <span class="spinner" id="spinner" style="display:none"></span>
+    Auto-refresh mỗi 5s
+  </div>
+</header>
+
+<main>
+
+  <!-- ── Risk Banner ──────────────────────────────────────────────────────── -->
+  <div id="risk-banner" class="LOADING">
+    <div class="risk-icon" id="risk-icon">⏳</div>
+    <div>
+      <div class="risk-title" id="risk-title">Đang tải...</div>
+      <div class="risk-desc"  id="risk-desc">Đang kết nối tới Dashboard API</div>
+    </div>
+    <div class="risk-summary">
+      <div class="nums">
+        <span class="up" id="sum-up">—</span>
+        <span style="color:var(--muted);font-size:20px"> / </span>
+        <span class="down" id="sum-down">—</span>
+      </div>
+      <div class="label">Server UP / DOWN</div>
+    </div>
+  </div>
+
+  <!-- ── 9 Cơ chế bảo vệ ─────────────────────────────────────────────────── -->
+  <div class="section-title">🛡️ 9 Cơ chế chống Cascading Failure (HAProxy)</div>
+  <div class="mechanisms-grid">
+    <div class="mech-card"><div class="mech-active"></div><span class="mech-icon">🔥</span><div><div class="mech-name">Rate Limiting</div><div class="mech-desc">Chặn IP gửi &gt;100 req/10s</div></div></div>
+    <div class="mech-card"><div class="mech-active"></div><span class="mech-icon">🔒</span><div><div class="mech-name">Maxconn</div><div class="mech-desc">Giới hạn 100 conn/server</div></div></div>
+    <div class="mech-card"><div class="mech-active"></div><span class="mech-icon">⏱️</span><div><div class="mech-name">Timeout</div><div class="mech-desc">Cắt request treo sau 10s</div></div></div>
+    <div class="mech-card"><div class="mech-active"></div><span class="mech-icon">📋</span><div><div class="mech-name">Queue Limit</div><div class="mech-desc">Hàng đợi tối đa 50 req</div></div></div>
+    <div class="mech-card"><div class="mech-active"></div><span class="mech-icon">⚡</span><div><div class="mech-name">Circuit Breaker</div><div class="mech-desc">Ngắt server sau 3 lỗi</div></div></div>
+    <div class="mech-card"><div class="mech-active"></div><span class="mech-icon">🔄</span><div><div class="mech-name">Retry Control</div><div class="mech-desc">Tối đa 2 lần retry</div></div></div>
+    <div class="mech-card"><div class="mech-active"></div><span class="mech-icon">🌱</span><div><div class="mech-name">Slow Start</div><div class="mech-desc">Phục hồi từ từ trong 30s</div></div></div>
+    <div class="mech-card"><div class="mech-active"></div><span class="mech-icon">🎯</span><div><div class="mech-name">Priority Routing</div><div class="mech-desc">/stress tách backend riêng</div></div></div>
+    <div class="mech-card"><div class="mech-active"></div><span class="mech-icon">📊</span><div><div class="mech-name">Monitoring</div><div class="mech-desc">Real-time stats + dashboard</div></div></div>
+  </div>
+
+  <!-- ── Backend Server Cards ─────────────────────────────────────────────── -->
+  <div class="section-title">🖥️ Backend Servers</div>
+  <div class="cards-grid" id="cards-container">
+    <div class="server-card LOADING">
+      <div class="card-header">
+        <div class="card-name">Đang tải...</div>
+        <div class="status-badge LOADING"><div class="dot pulse"></div>Loading</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HAProxy Stats ─────────────────────────────────────────────────────── -->
+  <div class="section-title">📈 HAProxy Connection Stats</div>
+  <div class="haproxy-section">
+    <div class="stats-table-wrap">
+      <div id="haproxy-error" style="display:none"></div>
+      <table id="haproxy-table" style="display:none">
+        <thead>
+          <tr>
+            <th>Proxy</th>
+            <th>Server</th>
+            <th>Status</th>
+            <th>Active Conn</th>
+            <th>Queue</th>
+            <th>Total Req</th>
+            <th>Errors</th>
+            <th>Resp Time (ms)</th>
+          </tr>
+        </thead>
+        <tbody id="haproxy-tbody"></tbody>
+      </table>
+      <div id="haproxy-loading" style="padding:20px 24px;color:var(--muted)">
+        Đang kết nối HAProxy stats...
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // ── Config ─────────────────────────────────────────────────────────────────
+  // Đổi thành IP máy Windows / VM đang chạy dashboard API nếu cần
+  const API_BASE = "http://127.0.0.1:5000";
+  const REFRESH_MS = 5000;
+
+  // ── Risk config ────────────────────────────────────────────────────────────
+  const RISK_MAP = {
+    OK:       { icon: "✅", title: "Hệ thống ổn định",       desc: "Tất cả server hoạt động bình thường. Không có nguy cơ cascading failure.", cls: "OK"       },
+    WARNING:  { icon: "⚠️",  title: "Cảnh báo — Rủi ro trung bình", desc: "Một server đã down. Tải đang dồn lên server còn lại. Theo dõi chặt!", cls: "WARNING"  },
+    CRITICAL: { icon: "🚨", title: "NGUY HIỂM — Cascading Failure!", desc: "Tất cả primary server đã down. Backup server đang gánh toàn bộ tải!", cls: "CRITICAL" },
+    LOADING:  { icon: "⏳", title: "Đang kết nối...",         desc: "Đang kết nối tới Dashboard API",                                    cls: "LOADING"  },
+  };
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function fmt(v) { return (v === null || v === undefined) ? '<span class="na">—</span>' : v; }
+
+  function renderBanner(risk, summary) {
+    const cfg = RISK_MAP[risk] || RISK_MAP.LOADING;
+    const banner = document.getElementById("risk-banner");
+    banner.className = cfg.cls;
+    document.getElementById("risk-icon").textContent  = cfg.icon;
+    document.getElementById("risk-title").textContent = cfg.title;
+    document.getElementById("risk-desc").textContent  = cfg.desc;
+    if (summary) {
+      document.getElementById("sum-up").textContent   = summary.up;
+      document.getElementById("sum-down").textContent = summary.down;
+    }
+  }
+
+  function renderCards(backends) {
+    const container = document.getElementById("cards-container");
+    container.innerHTML = backends.map(b => {
+      const st = b.status || "LOADING";
+      const dotClass = st === "UP" ? "pulse" : "";
+      const backupTag = b.backup ? '<span class="backup-tag">Backup</span>' : "";
+      return `
+        <div class="server-card ${st}">
+          <div class="card-header">
+            <div class="card-name">${b.name} ${backupTag}</div>
+            <div class="status-badge ${st}">
+              <div class="dot ${dotClass}"></div>${st}
+            </div>
+          </div>
+          <div class="card-metrics">
+            <div class="metric">
+              <div class="metric-label">Port</div>
+              <div class="metric-value">${b.port ?? '<span class="na">—</span>'}</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Hostname</div>
+              <div class="metric-value" style="font-size:12px">${b.hostname ?? '<span class="na">—</span>'}</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Uptime</div>
+              <div class="metric-value">${b.uptime ?? '<span class="na">—</span>'}</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Total Requests</div>
+              <div class="metric-value">${b.total_requests ?? '<span class="na">—</span>'}</div>
+            </div>
+            ${b.error ? `<div class="metric" style="grid-column:span 2">
+              <div class="metric-label">Lỗi</div>
+              <div class="metric-value" style="color:var(--red);font-size:12px">${b.error}</div>
+            </div>` : ""}
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  function renderHAProxy(haproxy) {
+    const errEl   = document.getElementById("haproxy-error");
+    const tableEl = document.getElementById("haproxy-table");
+    const loadEl  = document.getElementById("haproxy-loading");
+    const tbody   = document.getElementById("haproxy-tbody");
+
+    loadEl.style.display = "none";
+
+    if (haproxy.error) {
+      errEl.style.display   = "block";
+      tableEl.style.display = "none";
+      errEl.textContent = `⚠️ ${haproxy.error}`;
+      return;
+    }
+
+    const servers = haproxy.servers || [];
+    if (servers.length === 0) {
+      errEl.style.display   = "block";
+      tableEl.style.display = "none";
+      errEl.textContent = "Không có dữ liệu HAProxy (VM chưa bật hoặc stats chưa bật).";
+      return;
+    }
+
+    errEl.style.display   = "none";
+    tableEl.style.display = "table";
+
+    tbody.innerHTML = servers.map(s => {
+      const stLower = (s.status || "").toUpperCase();
+      const stCls = stLower.includes("UP") ? "tbl-status-up"
+                  : stLower.includes("DOWN") ? "tbl-status-down"
+                  : "tbl-status-no";
+      return `<tr>
+        <td>${s.proxy}</td>
+        <td>${s.server}</td>
+        <td class="${stCls}">${s.status}</td>
+        <td>${s.active_conn}</td>
+        <td>${s.queue} / ${s.queue_max}</td>
+        <td>${s.total_req}</td>
+        <td>${s.errors}</td>
+        <td>${s.response_time_ms}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  // ── Main fetch loop ────────────────────────────────────────────────────────
+  async function fetchStatus() {
+    document.getElementById("spinner").style.display = "inline-block";
+    try {
+      const res  = await fetch(`${API_BASE}/api/status`);
+      const data = await res.json();
+      renderBanner(data.cascade_risk, data.summary);
+      renderCards(data.backends);
+      renderHAProxy(data.haproxy);
+      document.getElementById("last-updated").textContent =
+        new Date().toLocaleTimeString("vi-VN");
+    } catch (e) {
+      renderBanner("LOADING", null);
+      document.getElementById("risk-desc").textContent =
+        `Không kết nối được Dashboard API (${API_BASE}) — Hãy chạy: python dashboard/api.py`;
+    } finally {
+      document.getElementById("spinner").style.display = "none";
+    }
+  }
+
+  fetchStatus();
+  setInterval(fetchStatus, REFRESH_MS);
+</script>
+</body>
+</html>
