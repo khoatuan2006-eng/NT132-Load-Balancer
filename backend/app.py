@@ -12,10 +12,12 @@ app = Flask(__name__)
 from routes.health import health_bp
 from routes.info import info_bp
 from routes.stress import stress_bp
+from routes.metrics import metrics_bp
 
 app.register_blueprint(health_bp)
 app.register_blueprint(info_bp)
 app.register_blueprint(stress_bp)
+app.register_blueprint(metrics_bp)
 
 # --- ĐOẠN NÀY ĐỂ FIX LỖI 404 ---
 @app.route('/')
@@ -36,7 +38,8 @@ def index():
         <p>Thử các đường dẫn: 
             <a href="/info">/info</a> | 
             <a href="/health">/health</a> | 
-            <a href="/stress?seconds=5">/stress</a>
+            <a href="/stress?seconds=5">/stress</a> | 
+            <a href="/metrics">/metrics</a>
         </p>
     </div>
     """, 200

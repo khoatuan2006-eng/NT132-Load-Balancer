@@ -1,1 +1,6 @@
-# File rỗng cho Level 7 - AI RL
+gymnasium>=0.29.0
+stable-baselines3>=2.0.0
+psutil>=5.9.0
+locust>=2.15.0
+requests>=2.31.0
+numpy>=1.24.0

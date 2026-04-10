@@ -8,25 +8,27 @@ echo.
 :: Lay duong dan thu muc chua file .bat nay
 cd /d "%~dp0"
 
-:: Chay Server1 (port 8001)
-echo [1/4] Khoi dong Server1 (port 8001)...
-start "Server1 - Port 8001" cmd /c "cd /d "%~dp0Server1" && python -m http.server 8001"
+:: Cai psutil neu chua co (can cho /metrics endpoint)
+echo [0/3] Kiem tra thu vien Python...
+pip install -q flask psutil
 
-:: Chay Server2 (port 8002)
-echo [2/4] Khoi dong Server2 (port 8002)...
-start "Server2 - Port 8002" cmd /c "cd /d "%~dp0Server2" && python -m http.server 8002"
+:: Chay Flask Server1 (port 8001)
+echo [1/3] Khoi dong Flask Server1 (port 8001)...
+start "Server1 - Port 8001" cmd /k "cd /d "%~dp0backend" && python app.py --port 8001"
 
-:: Chay Server3 - Backup (port 8003)
-echo [3/4] Khoi dong Server3 - Backup (port 8003)...
-start "Server3 - Backup Port 8003" cmd /c "cd /d "%~dp0Server3" && python -m http.server 8003"
-
-:: Doi 1 giay cho cac server khoi dong
+:: Doi 1 giay
 timeout /t 1 /nobreak >nul
 
-:: Chay Nginx
-echo [4/4] Khoi dong Nginx (port 8080)...
-cd /d "%~dp0nginx-1.29.6"
-start nginx.exe
+:: Chay Flask Server2 (port 8002)
+echo [2/3] Khoi dong Flask Server2 (port 8002)...
+start "Server2 - Port 8002" cmd /k "cd /d "%~dp0backend" && python app.py --port 8002"
+
+:: Doi 1 giay
+timeout /t 1 /nobreak >nul
+
+:: Chay Flask Server3 - Backup (port 8003)
+echo [3/3] Khoi dong Flask Server3 Backup (port 8003)...
+start "Server3 - Backup Port 8003" cmd /k "cd /d "%~dp0backend" && python app.py --port 8003"
 
 echo.
 echo ========================================
@@ -35,9 +37,11 @@ echo ========================================
 echo   Server1:  http://localhost:8001
 echo   Server2:  http://localhost:8002
 echo   Server3:  http://localhost:8003 (backup)
-echo   Nginx LB: http://localhost:8080
+echo.
+echo   Test nhanh:
+echo     http://localhost:8001/health
+echo     http://localhost:8001/metrics
+echo     http://localhost:8001/info
 echo ========================================
 echo.
-echo Nhan phim bat ky de mo trinh duyet...
-pause >nul
-start http://localhost:8080
+pause
