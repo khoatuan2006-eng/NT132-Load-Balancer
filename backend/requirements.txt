@@ -1,6 +1,2 @@
-# Backend dependencies (Level 1-6)
 flask
-
-# Dashboard API dependencies (Level 6 — Monitoring)
-flask-cors    # Cho phép dashboard/index.html gọi API từ file://
-requests      # Dashboard API dùng để gọi /health và /info của từng backend
+psutil
