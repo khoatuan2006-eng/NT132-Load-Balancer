@@ -1,0 +1,125 @@
+# ============================================================
+#  docker-compose.yml — Level 5: Full Dockerized System
+#
+#  Services:
+#    server1, server2, server3  → Flask backends (port 5000)
+#    haproxy1                   → Load Balancer Master  (localhost:18080)
+#    haproxy2                   → Load Balancer Backup  (localhost:18081)
+#
+#  Mạng nội bộ: lb_network
+#  Các container giao tiếp qua service name (server1, server2, server3)
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  #  Backend server 1
+  # ----------------------------------------------------------
+  server1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: server1
+    hostname: server1
+    # Không expose ra ngoài — chỉ giao tiếp nội bộ qua haproxy
+    networks:
+      - lb_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------
+  #  Backend server 2
+  # ----------------------------------------------------------
+  server2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: server2
+    hostname: server2
+    networks:
+      - lb_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------
+  #  Backend server 3
+  # ----------------------------------------------------------
+  server3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: server3
+    hostname: server3
+    networks:
+      - lb_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------
+  #  HAProxy 1 — Master Load Balancer
+  #  Truy cập: http://localhost:18080
+  #  Stats:    http://localhost:18404/stats  (admin / admin123)
+  # ----------------------------------------------------------
+  haproxy1:
+    image: haproxy:2.8-alpine
+    container_name: haproxy1
+    hostname: haproxy1
+    ports:
+      - "18080:80"      # HTTP traffic → localhost:18080
+      - "18404:8404"    # Stats page   → localhost:18404/stats
+    volumes:
+      # Mount file config vào đúng vị trí HAProxy đọc
+      - ./ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    # Dùng default entrypoint của image — không override command
+    # (stats socket đã comment out trong haproxy.cfg nên không cần mkdir nữa)
+    networks:
+      - lb_network
+    depends_on:
+      - server1
+      - server2
+      - server3
+    restart: unless-stopped
+
+  # ----------------------------------------------------------
+  #  HAProxy 2 — Backup Load Balancer
+  #  Truy cập: http://localhost:18081
+  #  Stats:    http://localhost:18405/stats  (admin / admin123)
+  # ----------------------------------------------------------
+  haproxy2:
+    image: haproxy:2.8-alpine
+    container_name: haproxy2
+    hostname: haproxy2
+    ports:
+      - "18081:80"      # HTTP traffic → localhost:18081
+      - "18405:8404"    # Stats page   → localhost:18405/stats
+    volumes:
+      - ./ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - lb_network
+    depends_on:
+      - server1
+      - server2
+      - server3
+    restart: unless-stopped
+
+# ----------------------------------------------------------
+#  Network nội bộ — tất cả container giao tiếp qua đây
+# ----------------------------------------------------------
+networks:
+  lb_network:
+    driver: bridge
