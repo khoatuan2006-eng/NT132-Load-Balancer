@@ -17,12 +17,30 @@ from haproxy_controller import (
     get_server_stats, get_session_count, get_response_time, get_server_status, set_server_weight
 )
 
-WINDOWS_IP   = "192.168.56.1"
-BACKEND_URLS = {
-    "s1": f"http://{WINDOWS_IP}:8001",
-    "s2": f"http://{WINDOWS_IP}:8002",
-    "s3": f"http://{WINDOWS_IP}:8003",
-}
+import os
+
+# Cấu hình qua biến môi trường (mặc định: Docker mode dùng service name)
+# VM mode:   BACKEND_HOST=192.168.56.1 BACKEND_PORTS=8001,8002,8003
+# Docker:    mặc định dùng server1:5000, server2:5000, server3:5000
+BACKEND_HOST  = os.environ.get("BACKEND_HOST", "")
+BACKEND_PORTS = os.environ.get("BACKEND_PORTS", "")
+
+if BACKEND_HOST and BACKEND_PORTS:
+    # VM mode: host:port riêng cho từng server
+    ports = BACKEND_PORTS.split(",")
+    BACKEND_URLS = {
+        "s1": f"http://{BACKEND_HOST}:{ports[0].strip()}",
+        "s2": f"http://{BACKEND_HOST}:{ports[1].strip()}",
+        "s3": f"http://{BACKEND_HOST}:{ports[2].strip()}",
+    }
+else:
+    # Docker mode: dùng service name trong docker-compose
+    BACKEND_URLS = {
+        "s1": "http://server1:5000",
+        "s2": "http://server2:5000",
+        "s3": "http://server3:5000",
+    }
+
 METRICS_TIMEOUT = 2
 STEP_INTERVAL   = 1
 

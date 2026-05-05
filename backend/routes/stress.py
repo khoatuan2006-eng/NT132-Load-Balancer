@@ -10,6 +10,10 @@ def stress_test():
     # Lấy số giây muốn stress từ query string (?seconds=2), mặc định là 5 giây
     seconds = request.args.get('seconds', default=5, type=int)
     
+    # Giới hạn tối đa 30 giây — tránh client gửi ?seconds=9999 block server
+    MAX_STRESS = 30
+    seconds = max(1, min(seconds, MAX_STRESS))
+    
     start_time = time.time()
     
     # Vòng lặp gây áp lực lên CPU (Busy Waiting)

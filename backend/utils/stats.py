@@ -5,15 +5,18 @@
 # 3. Tạo hàm get_stats() trả về dict tổng hợp
 
 import time
+import threading
 
-# Biến toàn cục để đếm request
+# Biến toàn cục để đếm request (thread-safe)
+_lock = threading.Lock()
 request_count = 0
 start_time = time.time()
 
 def count_request():
-    """Tăng biến đếm request"""
+    """Tăng biến đếm request (thread-safe với Lock)"""
     global request_count
-    request_count += 1
+    with _lock:
+        request_count += 1
 
 def get_uptime():
     """Tính thời gian server đã chạy (HH:MM:SS)"""
@@ -25,8 +28,10 @@ def get_uptime():
 
 def get_stats():
     """Trả về dict tổng hợp stats"""
+    with _lock:
+        count = request_count
     return {
-        "total_requests": request_count,
+        "total_requests": count,
         "uptime": get_uptime(),
         "start_time": start_time
     }

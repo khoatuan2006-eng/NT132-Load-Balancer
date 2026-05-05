@@ -2,7 +2,7 @@
 # dashboard/api.py — Level 6: Monitoring API
 # =============================================================================
 # Chạy: python api.py
-# Truy cập: http://localhost:5000
+# Truy cập: http://localhost:5050
 #   GET /api/status   → trạng thái tổng hợp tất cả backend + HAProxy stats
 #   GET /api/health   → nhanh: chỉ kiểm tra backend còn sống không
 # =============================================================================
@@ -189,7 +189,7 @@ def api_health():
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--windows-ip", type=str, default="127.0.0.1",
                         help="IP của máy Windows chạy backend (nếu chạy trên VM)")
     parser.add_argument("--haproxy-ip", type=str, default=None,
