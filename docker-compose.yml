@@ -93,6 +93,12 @@ services:
       - server2
       - server3
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   # ----------------------------------------------------------
   #  HAProxy 2 — Backup Load Balancer
@@ -117,6 +123,12 @@ services:
       - server2
       - server3
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
 # ----------------------------------------------------------
 #  Network nội bộ — tất cả container giao tiếp qua đây
